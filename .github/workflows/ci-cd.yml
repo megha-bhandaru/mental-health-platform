@@ -1,0 +1,69 @@
+name: MindSpace CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Run backend health check
+        run: |
+          cd backend
+          node -e "
+            const http = require('http');
+            setTimeout(() => {
+              http.get('http://localhost:5000/health', (res) => {
+                console.log('Health check status:', res.statusCode);
+                process.exit(res.statusCode === 200 ? 0 : 1);
+              }).on('error', () => process.exit(1));
+            }, 3000);
+            require('./server.js');
+          "
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker images
+        run: docker compose build
