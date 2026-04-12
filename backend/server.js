@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 const app = express();
@@ -11,9 +12,23 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Rate limiting - max 100 requests per 15 min per IP
+// Rate limiting
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use(limiter);
+
+// MongoDB Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo:27017/mindspace';
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.log('MongoDB connection error:', err));
+
+// Mood Schema
+const moodSchema = new mongoose.Schema({
+  mood: { type: String, required: true },
+  note: { type: String, default: '' },
+  timestamp: { type: Date, default: Date.now }
+});
+const Mood = mongoose.model('Mood', moodSchema);
 
 // Routes
 app.get('/', (req, res) => {
@@ -24,11 +39,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/mood', (req, res) => {
+app.post('/api/mood', async (req, res) => {
   const { mood, note } = req.body;
   if (!mood) return res.status(400).json({ error: 'Mood is required' });
-  console.log(`Mood logged: ${mood} - ${note || 'no note'}`);
-  res.json({ success: true, message: 'Mood logged', mood, note });
+  try {
+    const entry = new Mood({ mood, note });
+    await entry.save();
+    res.json({ success: true, message: 'Mood logged', entry });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save mood' });
+  }
+});
+
+app.get('/api/mood/history', async (req, res) => {
+  try {
+    const moods = await Mood.find().sort({ timestamp: -1 });
+    res.json({ success: true, count: moods.length, data: moods });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch mood history' });
+  }
 });
 
 app.get('/api/resources', (req, res) => {
@@ -40,7 +69,7 @@ app.get('/api/resources', (req, res) => {
   ]);
 });
 
-// Prometheus metrics endpoint
+// Prometheus metrics
 const client = require('prom-client');
 client.collectDefaultMetrics();
 app.get('/metrics', async (req, res) => {
@@ -48,5 +77,9 @@ app.get('/metrics', async (req, res) => {
   res.end(await client.register.metrics());
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+// Export for tests
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+}
+module.exports = app;

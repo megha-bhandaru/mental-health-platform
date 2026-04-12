@@ -17,8 +17,17 @@ function App() {
   const [note, setNote] = useState('');
   const [page, setPage] = useState('home');
 
-  const logMood = () => {
+  const logMood = async () => {
     if (mood === null) return alert('Please select a mood!');
+    try {
+      await fetch('/api/mood', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood: moodLabels[mood], note }),
+      });
+    } catch (err) {
+      console.log('Could not save to backend', err);
+    }
     const entry = {
       mood: moodLabels[mood],
       emoji: moodEmojis[mood],

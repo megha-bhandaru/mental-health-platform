@@ -15,8 +15,20 @@ services:
     environment:
       - PORT=5000
       - NODE_ENV=production
+      - MONGO_URI=mongodb://mongo:27017/mindspace
     ports:
       - "5000:5000"
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:6
+    container_name: mindspace-mongo
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
 
   nginx:
     image: nginx:alpine
@@ -49,4 +61,5 @@ services:
     restart: always
 
 volumes:
+  mongo_data:
   grafana_data:
